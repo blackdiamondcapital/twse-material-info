@@ -48,18 +48,30 @@ app = FastAPI(
 )
 
 public_dir = BASE_DIR / "public"
-if not IS_VERCEL and public_dir.exists():
-    @app.get("/")
-    async def index():
-        return FileResponse(public_dir / "index.html")
 
-    @app.get("/style.css")
-    async def style():
-        return FileResponse(public_dir / "style.css", media_type="text/css")
 
-    @app.get("/app.js")
-    async def script():
-        return FileResponse(public_dir / "app.js", media_type="application/javascript")
+@app.get("/")
+async def index():
+    index_file = public_dir / "index.html"
+    if not index_file.exists():
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(index_file)
+
+
+@app.get("/style.css")
+async def style():
+    css_file = public_dir / "style.css"
+    if not css_file.exists():
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(css_file, media_type="text/css")
+
+
+@app.get("/app.js")
+async def script():
+    js_file = public_dir / "app.js"
+    if not js_file.exists():
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(js_file, media_type="application/javascript")
 
 
 def _verify_cron(authorization: str | None) -> None:
