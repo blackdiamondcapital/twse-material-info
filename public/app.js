@@ -102,8 +102,8 @@ async function loadAnnouncements(page = 1) {
     const data = await res.json();
 
     if (data.total === 0) {
-      els.resultsInfo.textContent = "查無資料";
-      els.resultsList.innerHTML = '<div class="empty-state">目前沒有符合條件的重大訊息</div>';
+      els.resultsInfo.textContent = "查無訊號";
+      els.resultsList.innerHTML = '<div class="empty-state">目前沒有符合條件的重訊脈動</div>';
       els.pagination.innerHTML = "";
       return;
     }
@@ -226,7 +226,7 @@ function closeModal() {
 
 async function triggerSync() {
   els.syncBtn.disabled = true;
-  els.syncBtn.textContent = "同步中...";
+  els.syncBtn.textContent = "同步中…";
 
   try {
     const res = await fetch("/api/sync", { method: "POST" });
@@ -234,7 +234,7 @@ async function triggerSync() {
 
     if (data.status === "success" || data.status === "partial") {
       showToast(
-        `同步完成：上市 +${data.twse.inserted} / 上櫃 +${data.otc.inserted}`,
+        `脈動同步完成：上市 +${data.twse.inserted} / 上櫃 +${data.otc.inserted}`,
         data.status === "success" ? "success" : "info"
       );
       await loadStats();
@@ -246,7 +246,7 @@ async function triggerSync() {
     showToast("同步請求失敗", "error");
   } finally {
     els.syncBtn.disabled = false;
-    els.syncBtn.textContent = "立即同步";
+    els.syncBtn.textContent = "同步脈動";
   }
 }
 

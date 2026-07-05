@@ -1,5 +1,5 @@
 [project]
-name = "twse-material-info"
+name = "quantgems-twse-material-info"
 version = "3.0.0"
 requires-python = ">=3.11"
 dependencies = [

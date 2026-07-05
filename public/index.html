@@ -3,18 +3,36 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>台股重大訊息查詢</title>
+  <title>QuantGems Pulse · 重訊脈衝</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+
   <header class="header">
     <div class="container header-inner">
-      <div>
-        <h1>台股重大訊息</h1>
+      <div class="brand-block">
+        <div class="brand-row">
+          <div class="brand-logo" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M16 2L26 11L16 30L6 11L16 2Z" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M16 8L21 13L16 24L11 13L16 8Z" fill="currentColor" opacity="0.35"/>
+            </svg>
+          </div>
+          <div>
+            <div class="brand-top">
+              <span class="brand-name">QuantGems</span>
+              <span class="live-badge"><span class="live-dot"></span>LIVE</span>
+            </div>
+            <h1>Pulse <span class="product-cn">重訊脈衝</span></h1>
+            <p class="brand-tagline">上市 · 上櫃重大訊息即時情報站</p>
+          </div>
+        </div>
       </div>
       <div class="header-actions">
-        <button id="exportBtn" class="btn btn-secondary">匯出 Excel</button>
-        <button id="syncBtn" class="btn btn-primary">立即同步</button>
+        <button id="exportBtn" class="btn btn-ghost">匯出</button>
+        <button id="syncBtn" class="btn btn-primary">同步脈動</button>
       </div>
     </div>
   </header>
@@ -22,24 +40,28 @@
   <main class="container">
     <section class="stats-bar" id="statsBar">
       <div class="stat-card">
-        <span class="stat-label">總筆數</span>
+        <span class="stat-label">訊號總量</span>
         <span class="stat-value" id="statTotal">-</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">上市</span>
-        <span class="stat-value" id="statTwse">-</span>
+        <span class="stat-label">上市 TWSE</span>
+        <span class="stat-value stat-twse" id="statTwse">-</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">上櫃</span>
-        <span class="stat-value" id="statOtc">-</span>
+        <span class="stat-label">上櫃 TPEx</span>
+        <span class="stat-value stat-otc" id="statOtc">-</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">最新發言日</span>
+        <span class="stat-label">最新脈動</span>
         <span class="stat-value stat-value-sm" id="statLatestDate">-</span>
       </div>
     </section>
 
     <section class="search-panel">
+      <div class="panel-head">
+        <h2>訊號篩選</h2>
+        <p>鎖定標的、關鍵字或日期區間</p>
+      </div>
       <form id="searchForm" class="search-form">
         <div class="form-group">
           <label for="market">市場</label>
@@ -50,35 +72,38 @@
           </select>
         </div>
         <div class="form-group">
-          <label for="stockCode">公司代號</label>
-          <input type="text" id="stockCode" placeholder="例：2330" maxlength="6">
+          <label for="stockCode">代號</label>
+          <input type="text" id="stockCode" placeholder="2330" maxlength="6">
         </div>
         <div class="form-group">
-          <label for="companyName">公司名稱</label>
-          <input type="text" id="companyName" placeholder="例：台積電">
+          <label for="companyName">公司</label>
+          <input type="text" id="companyName" placeholder="台積電">
         </div>
         <div class="form-group">
           <label for="keyword">關鍵字</label>
-          <input type="text" id="keyword" placeholder="搜尋主旨或說明">
+          <input type="text" id="keyword" placeholder="併購、增資、處分…">
         </div>
         <div class="form-group">
-          <label for="dateFrom">發言日期起</label>
+          <label for="dateFrom">起始日</label>
           <input type="date" id="dateFrom">
         </div>
         <div class="form-group">
-          <label for="dateTo">發言日期迄</label>
+          <label for="dateTo">截止日</label>
           <input type="date" id="dateTo">
         </div>
         <div class="form-actions">
-          <button type="submit" class="btn btn-primary">搜尋</button>
-          <button type="button" id="resetBtn" class="btn btn-secondary">清除</button>
+          <button type="submit" class="btn btn-primary">掃描訊號</button>
+          <button type="button" id="resetBtn" class="btn btn-ghost">重置</button>
         </div>
       </form>
     </section>
 
     <section class="results-section">
       <div class="results-header">
-        <span id="resultsInfo">載入中...</span>
+        <div class="results-title-wrap">
+          <h2>訊號流</h2>
+          <span id="resultsInfo">載入中...</span>
+        </div>
         <span id="notifyStatus" class="notify-status"></span>
       </div>
       <div id="resultsList" class="results-list"></div>
@@ -95,6 +120,14 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span class="footer-brand">QuantGems Pulse</span>
+      <span class="footer-divider">·</span>
+      <span>重訊脈衝情報系統</span>
+    </div>
+  </footer>
 
   <script src="/app.js"></script>
 </body>

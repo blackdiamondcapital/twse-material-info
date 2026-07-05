@@ -41,9 +41,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="台股重大訊息查詢系統",
-    description="上市/上櫃公司每日重大訊息查詢、通知與匯出",
-    version="3.0.0",
+    title="QuantGems Pulse",
+    description="QuantGems 重訊脈衝 — 上市/上櫃重大訊息即時情報",
+    version="3.1.0",
     lifespan=lifespan,
 )
 
