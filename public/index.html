@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>台股重大訊息查詢</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <div>
+        <h1>台股重大訊息</h1>
+      </div>
+      <div class="header-actions">
+        <button id="exportBtn" class="btn btn-secondary">匯出 Excel</button>
+        <button id="syncBtn" class="btn btn-primary">立即同步</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="stats-bar" id="statsBar">
+      <div class="stat-card">
+        <span class="stat-label">總筆數</span>
+        <span class="stat-value" id="statTotal">-</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">上市</span>
+        <span class="stat-value" id="statTwse">-</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">上櫃</span>
+        <span class="stat-value" id="statOtc">-</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">最新發言日</span>
+        <span class="stat-value stat-value-sm" id="statLatestDate">-</span>
+      </div>
+    </section>
+
+    <section class="search-panel">
+      <form id="searchForm" class="search-form">
+        <div class="form-group">
+          <label for="market">市場</label>
+          <select id="market">
+            <option value="">全部</option>
+            <option value="TWSE">上市</option>
+            <option value="OTC">上櫃</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="stockCode">公司代號</label>
+          <input type="text" id="stockCode" placeholder="例：2330" maxlength="6">
+        </div>
+        <div class="form-group">
+          <label for="companyName">公司名稱</label>
+          <input type="text" id="companyName" placeholder="例：台積電">
+        </div>
+        <div class="form-group">
+          <label for="keyword">關鍵字</label>
+          <input type="text" id="keyword" placeholder="搜尋主旨或說明">
+        </div>
+        <div class="form-group">
+          <label for="dateFrom">發言日期起</label>
+          <input type="date" id="dateFrom">
+        </div>
+        <div class="form-group">
+          <label for="dateTo">發言日期迄</label>
+          <input type="date" id="dateTo">
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">搜尋</button>
+          <button type="button" id="resetBtn" class="btn btn-secondary">清除</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="results-section">
+      <div class="results-header">
+        <span id="resultsInfo">載入中...</span>
+        <span id="notifyStatus" class="notify-status"></span>
+      </div>
+      <div id="resultsList" class="results-list"></div>
+      <div id="pagination" class="pagination"></div>
+    </section>
+  </main>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <button class="modal-close" id="modalClose">&times;</button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
