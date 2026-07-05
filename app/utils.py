@@ -1,3 +1,4 @@
+import re
 from datetime import date, time
 
 
@@ -39,3 +40,32 @@ def normalize_text(text: str | None) -> str:
     if not text:
         return ""
     return text.replace("\r\n", "\n").strip()
+
+
+def parse_slash_roc_date(value: str | None) -> date | None:
+    """民國日期 114/07/02 -> date"""
+    if not value:
+        return None
+    match = re.match(r"^(\d{2,3})/(\d{1,2})/(\d{1,2})$", value.strip())
+    if not match:
+        return None
+    try:
+        year = int(match.group(1)) + 1911
+        month = int(match.group(2))
+        day = int(match.group(3))
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
+def parse_colon_time(value: str | None) -> time | None:
+    """17:30:51 -> time"""
+    if not value:
+        return None
+    match = re.match(r"^(\d{1,2}):(\d{2}):(\d{2})$", value.strip())
+    if not match:
+        return None
+    try:
+        return time(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    except ValueError:
+        return None

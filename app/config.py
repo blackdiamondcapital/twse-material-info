@@ -15,6 +15,10 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 TWSE_API_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap04_L"
 TPEX_API_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O"
 
+# MOPS 歷史重大訊息（公告快易查 / 當日重大訊息 JSON API）
+MOPS_BASE_URL = "https://mops.twse.com.tw"
+MOPS_REQUEST_DELAY = float(os.getenv("MOPS_REQUEST_DELAY", "0.35"))
+
 DEFAULT_PORT = 8765
 EXPORT_MAX_ROWS = 10000
 

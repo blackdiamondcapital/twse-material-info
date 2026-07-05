@@ -1,6 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from urllib.parse import quote
 
 from fastapi import FastAPI, Header, HTTPException, Query
@@ -23,6 +23,7 @@ from app.database import (
 )
 from app.export import build_excel
 from app.fetcher import sync_announcements
+from app.mops_history import backfill_announcements
 
 logging.basicConfig(
     level=logging.INFO,
@@ -160,6 +161,34 @@ async def cron_sync(authorization: str | None = Header(None)):
 async def trigger_sync():
     """手動同步"""
     return await sync_announcements()
+
+
+@app.post("/api/backfill")
+async def trigger_backfill(
+    date_from: str | None = Query(None, description="起始日 YYYY-MM-DD"),
+    date_to: str | None = Query(None, description="結束日 YYYY-MM-DD"),
+    days: int = Query(365, ge=1, le=730, description="未指定日期時回填天數"),
+):
+    """MOPS 歷史回填（本機建議使用 backfill.py；Vercel 僅允許 7 天以內）"""
+    today = date.today()
+    if date_from and date_to:
+        start = date.fromisoformat(date_from)
+        end = date.fromisoformat(date_to)
+    elif date_from:
+        start = date.fromisoformat(date_from)
+        end = today
+    else:
+        end = today
+        start = today - timedelta(days=days - 1)
+
+    span = (end - start).days + 1
+    if IS_VERCEL and span > 7:
+        raise HTTPException(
+            status_code=400,
+            detail="Vercel 環境請使用 backfill.py 本機回填，或將區間限制在 7 天以內",
+        )
+
+    return await backfill_announcements(start, end)
 
 
 @app.get("/api/stats")
