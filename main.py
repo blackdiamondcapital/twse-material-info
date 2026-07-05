@@ -4,7 +4,7 @@ from datetime import datetime
 from urllib.parse import quote
 
 from fastapi import FastAPI, Header, HTTPException, Query
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 
 from app.config import (
     BASE_DIR,
@@ -50,28 +50,23 @@ app = FastAPI(
 public_dir = BASE_DIR / "public"
 
 
-@app.get("/")
-async def index():
-    index_file = public_dir / "index.html"
-    if not index_file.exists():
-        raise HTTPException(status_code=404, detail="Not Found")
-    return FileResponse(index_file)
+if IS_VERCEL:
+    @app.get("/", include_in_schema=False)
+    async def index():
+        # public/ 由 Vercel CDN 提供，導向靜態首頁
+        return RedirectResponse("/index.html", status_code=307)
+else:
+    @app.get("/")
+    async def index():
+        return FileResponse(public_dir / "index.html")
 
+    @app.get("/style.css", include_in_schema=False)
+    async def style():
+        return FileResponse(public_dir / "style.css", media_type="text/css")
 
-@app.get("/style.css")
-async def style():
-    css_file = public_dir / "style.css"
-    if not css_file.exists():
-        raise HTTPException(status_code=404, detail="Not Found")
-    return FileResponse(css_file, media_type="text/css")
-
-
-@app.get("/app.js")
-async def script():
-    js_file = public_dir / "app.js"
-    if not js_file.exists():
-        raise HTTPException(status_code=404, detail="Not Found")
-    return FileResponse(js_file, media_type="application/javascript")
+    @app.get("/app.js", include_in_schema=False)
+    async def script():
+        return FileResponse(public_dir / "app.js", media_type="application/javascript")
 
 
 def _verify_cron(authorization: str | None) -> None:
