@@ -20,10 +20,11 @@ from app.database import (
     get_stats,
     init_db,
     search_announcements,
+    update_announcement_detail,
 )
 from app.export import build_excel
 from app.fetcher import sync_announcements
-from app.mops_history import backfill_announcements
+from app.mops_history import backfill_announcements, enrich_announcement_detail
 
 logging.basicConfig(
     level=logging.INFO,
@@ -147,7 +148,29 @@ async def get_announcement_detail(announcement_id: int):
     item = get_announcement(announcement_id)
     if not item:
         raise HTTPException(status_code=404, detail="找不到該筆重大訊息")
+
+    if not item.get("description"):
+        enriched = await enrich_announcement_detail(item)
+        if enriched.get("description") or enriched.get("clause"):
+            update_announcement_detail(
+                announcement_id,
+                clause=enriched.get("clause") or "",
+                event_date=_parse_detail_date(enriched.get("event_date")),
+                description=enriched.get("description") or "",
+            )
+            item = get_announcement(announcement_id) or enriched
+
     return item
+
+
+def _parse_detail_date(value) -> date | None:
+    if not value:
+        return None
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        return date.fromisoformat(value[:10])
+    return None
 
 
 @app.get("/api/sync")

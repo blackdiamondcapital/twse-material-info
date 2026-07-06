@@ -460,6 +460,42 @@ def get_announcement(announcement_id: int) -> dict[str, Any] | None:
     return _row_to_dict(row) if row else None
 
 
+def update_announcement_detail(
+    announcement_id: int,
+    *,
+    clause: str,
+    event_date: date | None,
+    description: str,
+) -> None:
+    ph = "%s" if USE_POSTGRES else "?"
+    params = (
+        clause,
+        _serialize_date(event_date),
+        description,
+        announcement_id,
+    )
+    with get_connection() as conn:
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    UPDATE announcements
+                    SET clause = {ph}, event_date = {ph}, description = {ph}
+                    WHERE id = {ph}
+                    """,
+                    params,
+                )
+        else:
+            conn.execute(
+                """
+                UPDATE announcements
+                SET clause = ?, event_date = ?, description = ?
+                WHERE id = ?
+                """,
+                params,
+            )
+
+
 def get_latest_report_date() -> date | None:
     sql = "SELECT MAX(report_date) AS v FROM announcements"
     with get_connection() as conn:

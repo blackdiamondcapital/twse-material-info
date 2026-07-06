@@ -207,6 +207,9 @@ function getPageRange(current, total) {
 }
 
 async function openDetail(id) {
+  els.modal.classList.remove("hidden");
+  els.modalBody.innerHTML = '<div class="empty-state">載入詳情中…</div>';
+
   try {
     const res = await fetch(`/api/announcements/${id}`);
     const item = await res.json();

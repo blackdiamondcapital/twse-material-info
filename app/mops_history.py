@@ -338,3 +338,142 @@ async def backfill_announcements(
         "inserted": result["inserted"],
         "message": message,
     }
+
+
+def _parse_stored_date(value: Any) -> date | None:
+    if not value:
+        return None
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value)[:10])
+
+
+def _normalize_time_str(value: Any) -> str:
+    if not value:
+        return ""
+    return str(value).split(".")[0][:8]
+
+
+def _detail_row_to_fields(detail_row: list[Any]) -> dict[str, Any]:
+    if len(detail_row) < 10:
+        return {}
+    return {
+        "clause": normalize_text(str(detail_row[7])),
+        "event_date": parse_slash_roc_date(str(detail_row[8])),
+        "description": normalize_text(str(detail_row[9])),
+    }
+
+
+async def _fetch_mops_detail(
+    client: httpx.AsyncClient,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    response = await client.post(
+        f"{MOPS_BASE_URL}/mops/api/t05st02_detail",
+        json={
+            "enterDate": params["enterDate"],
+            "serialNumber": params["serialNumber"],
+            "companyId": params["companyId"],
+            "marketKind": params["marketKind"],
+        },
+    )
+    response.raise_for_status()
+    body = response.json()
+    if body.get("code") != 200:
+        raise ValueError(body.get("message", "MOPS 詳情查詢失敗"))
+
+    detail_rows = body.get("result", {}).get("data", [])
+    if not detail_rows:
+        return {}
+    return _detail_row_to_fields(detail_rows[0])
+
+
+async def _fetch_raw_day_rows(
+    client: httpx.AsyncClient,
+    query_day: date,
+) -> list[list[Any]]:
+    roc_year = query_day.year - 1911
+    payload = {"year": roc_year, "month": query_day.month, "day": query_day.day}
+    response = await client.post(
+        f"{MOPS_BASE_URL}/mops/api/t05st02",
+        json=payload,
+    )
+    response.raise_for_status()
+    body = response.json()
+    if body.get("code") != 200:
+        raise ValueError(body.get("message", "MOPS 查詢失敗"))
+    return body.get("result", {}).get("data", [])
+
+
+def _row_matches_record(row: list[Any], record: dict[str, Any]) -> bool:
+    if len(row) < 5:
+        return False
+    if str(row[2]).strip() != str(record["stock_code"]).strip():
+        return False
+    if normalize_text(str(row[4])) != normalize_text(record.get("subject") or ""):
+        return False
+
+    record_time = _normalize_time_str(record.get("announce_time"))
+    row_time = str(row[1]).strip()
+    if record_time and row_time and record_time != row_time:
+        return False
+    return True
+
+
+async def enrich_announcement_detail(record: dict[str, Any]) -> dict[str, Any]:
+    """從 MOPS 詳情 API 補齊說明、符合條款、事實發生日。"""
+    if record.get("description"):
+        return record
+
+    search_days: set[date] = set()
+    for key in ("report_date", "announce_date"):
+        parsed = _parse_stored_date(record.get(key))
+        if parsed:
+            search_days.add(parsed)
+
+    if not search_days:
+        return record
+
+    headers = {
+        "User-Agent": "QuantGems-Pulse/1.0",
+        "Accept": "application/json",
+    }
+
+    async with httpx.AsyncClient(
+        timeout=60.0,
+        follow_redirects=True,
+        headers=headers,
+    ) as client:
+        await _ensure_mops_session(client)
+
+        for query_day in sorted(search_days):
+            try:
+                rows = await _fetch_raw_day_rows(client, query_day)
+            except Exception as exc:
+                logger.warning("MOPS 詳情列表查詢失敗 %s: %s", query_day, exc)
+                continue
+
+            for row in rows:
+                if not _row_matches_record(row, record):
+                    continue
+
+                detail_obj = row[5] if len(row) > 5 else {}
+                params = (
+                    detail_obj.get("parameters", {})
+                    if isinstance(detail_obj, dict)
+                    else {}
+                )
+                if not params:
+                    continue
+
+                try:
+                    fields = await _fetch_mops_detail(client, params)
+                except Exception as exc:
+                    logger.warning("MOPS 詳情抓取失敗: %s", exc)
+                    continue
+
+                if fields.get("description") or fields.get("clause"):
+                    record = {**record, **fields}
+                    return record
+
+    return record
