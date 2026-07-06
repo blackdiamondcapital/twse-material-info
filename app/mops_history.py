@@ -6,11 +6,14 @@ from typing import Any
 
 import httpx
 
-from app.config import MOPS_BASE_URL, MOPS_REQUEST_DELAY
-from app.database import insert_announcements, log_sync
+from app.config import IS_VERCEL, MOPS_BASE_URL, MOPS_REQUEST_DELAY
+from app.database import get_latest_report_date, insert_announcements, log_sync
 from app.utils import normalize_text, parse_colon_time, parse_slash_roc_date
 
 logger = logging.getLogger(__name__)
+
+# Vercel 單次同步最多補齊天數（避免逾時）
+SYNC_GAP_MAX_DAYS = 14
 
 MARKET_KIND_MAP = {
     "sii": "TWSE",
@@ -66,6 +69,28 @@ def _row_to_record(row: list[Any], query_day: date) -> dict[str, Any] | None:
     }
 
 
+def _count_markets(records: list[dict[str, Any]]) -> dict[str, int]:
+    return {
+        "twse": sum(1 for r in records if r["market"] == "TWSE"),
+        "otc": sum(1 for r in records if r["market"] == "OTC"),
+    }
+
+
+def compute_gap_range(today: date | None = None) -> tuple[date, date] | None:
+    """依資料庫最新 report_date 計算需補齊的日期區間（含今日）。"""
+    today = today or date.today()
+    latest = get_latest_report_date()
+
+    if latest is None:
+        return today, today
+
+    date_from = latest + timedelta(days=1)
+    if date_from > today:
+        return None
+
+    return date_from, today
+
+
 async def _ensure_mops_session(client: httpx.AsyncClient) -> None:
     await client.get(f"{MOPS_BASE_URL}/mops")
 
@@ -104,18 +129,16 @@ async def _fetch_day_list(
     return []
 
 
-async def backfill_announcements(
+async def _fetch_day_range(
     date_from: date,
     date_to: date,
     *,
     request_delay: float = MOPS_REQUEST_DELAY,
 ) -> dict[str, Any]:
-    if date_from > date_to:
-        raise ValueError("date_from 不可晚於 date_to")
-
     total_days = (date_to - date_from).days + 1
     fetched = 0
     inserted_total = 0
+    inserted_records: list[dict[str, Any]] = []
     errors: list[str] = []
     pending_records: list[dict[str, Any]] = []
 
@@ -141,20 +164,20 @@ async def backfill_announcements(
                 pending_records.extend(day_records)
 
                 if len(pending_records) >= 1000:
-                    inserted = insert_announcements(pending_records)
-                    inserted_total += len(inserted)
+                    batch = insert_announcements(pending_records)
+                    inserted_total += len(batch)
+                    inserted_records.extend(batch)
                     pending_records.clear()
 
-                if day_index % 10 == 0 or day_index == total_days:
-                    logger.info(
-                        "回填進度 %d/%d 天 (%s)，累計抓取 %d 筆",
-                        day_index,
-                        total_days,
-                        current.isoformat(),
-                        fetched,
-                    )
+                logger.info(
+                    "MOPS 補齊 %d/%d 天 (%s)，抓取 %d 筆",
+                    day_index,
+                    total_days,
+                    current.isoformat(),
+                    len(day_records),
+                )
             except Exception as exc:
-                logger.exception("回填失敗：%s", current)
+                logger.exception("MOPS 補齊失敗：%s", current)
                 errors.append(f"{current.isoformat()}: {exc}")
 
             current += timedelta(days=1)
@@ -162,15 +185,12 @@ async def backfill_announcements(
                 await asyncio.sleep(request_delay)
 
     if pending_records:
-        inserted = insert_announcements(pending_records)
-        inserted_total += len(inserted)
+        batch = insert_announcements(pending_records)
+        inserted_total += len(batch)
+        inserted_records.extend(batch)
 
+    markets = _count_markets(inserted_records)
     status = "error" if errors and inserted_total == 0 else ("partial" if errors else "success")
-    message = "; ".join(errors[:5])
-    if len(errors) > 5:
-        message += f" ...共 {len(errors)} 個錯誤"
-
-    log_sync(fetched, inserted_total, status, message or "MOPS 歷史回填")
 
     return {
         "status": status,
@@ -179,5 +199,73 @@ async def backfill_announcements(
         "days": total_days,
         "fetched": fetched,
         "inserted": inserted_total,
+        "twse": {"inserted": markets["twse"]},
+        "otc": {"inserted": markets["otc"]},
+        "message": "; ".join(errors[:5]),
+        "errors": errors,
+    }
+
+
+async def sync_missing_days(
+    *,
+    max_days: int | None = None,
+    request_delay: float = MOPS_REQUEST_DELAY,
+) -> dict[str, Any]:
+    """從資料庫最新 report_date 的隔天起，補齊至今日。"""
+    gap = compute_gap_range()
+    if gap is None:
+        return {
+            "status": "skipped",
+            "days": 0,
+            "fetched": 0,
+            "inserted": 0,
+            "twse": {"inserted": 0},
+            "otc": {"inserted": 0},
+            "message": "資料已是最新",
+        }
+
+    date_from, date_to = gap
+    total_gap_days = (date_to - date_from).days + 1
+    capped = False
+    limit = max_days if max_days is not None else (SYNC_GAP_MAX_DAYS if IS_VERCEL else None)
+
+    if limit is not None and total_gap_days > limit:
+        date_from = date_to - timedelta(days=limit - 1)
+        capped = True
+
+    result = await _fetch_day_range(date_from, date_to, request_delay=request_delay)
+    result["skipped"] = False
+    result["capped"] = capped
+    result["total_gap_days"] = total_gap_days
+    if capped:
+        result["message"] = (
+            f"本次補齊 {result['days']}/{total_gap_days} 天，請再按一次同步以繼續"
+        )
+    elif not result.get("message"):
+        result["message"] = f"補齊 {result['days']} 天"
+
+    return result
+
+
+async def backfill_announcements(
+    date_from: date,
+    date_to: date,
+    *,
+    request_delay: float = MOPS_REQUEST_DELAY,
+) -> dict[str, Any]:
+    if date_from > date_to:
+        raise ValueError("date_from 不可晚於 date_to")
+
+    result = await _fetch_day_range(date_from, date_to, request_delay=request_delay)
+    message = result.get("message") or "MOPS 歷史回填"
+    log_sync(result["fetched"], result["inserted"], result["status"], message)
+
+    return {
+        "status": result["status"],
+        "date_from": date_from.isoformat(),
+        "date_to": date_to.isoformat(),
+        "days": result["days"],
+        "fetched": result["fetched"],
+        "inserted": result["inserted"],
         "message": message,
     }

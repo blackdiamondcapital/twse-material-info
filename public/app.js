@@ -233,10 +233,17 @@ async function triggerSync() {
     const data = await res.json();
 
     if (data.status === "success" || data.status === "partial") {
-      showToast(
-        `脈動同步完成：上市 +${data.twse.inserted} / 上櫃 +${data.otc.inserted}`,
-        data.status === "success" ? "success" : "info"
-      );
+      const gap = data.gap || {};
+      let msg;
+      if (gap.days > 0) {
+        msg = `補齊 ${gap.days} 天，新增 ${gap.inserted || 0} 筆`;
+        if (gap.capped) msg += "（尚有缺口，請再同步）";
+      } else if (data.inserted > 0) {
+        msg = `脈動同步完成：上市 +${data.twse.inserted} / 上櫃 +${data.otc.inserted}`;
+      } else {
+        msg = "已是最新，無需補齊";
+      }
+      showToast(msg, data.status === "success" ? "success" : "info");
       await loadStats();
       await loadAnnouncements(1);
     } else {

@@ -460,6 +460,18 @@ def get_announcement(announcement_id: int) -> dict[str, Any] | None:
     return _row_to_dict(row) if row else None
 
 
+def get_latest_report_date() -> date | None:
+    sql = "SELECT MAX(report_date) AS v FROM announcements"
+    with get_connection() as conn:
+        row = _fetch_one(conn, sql, [])
+    if not row or not row["v"]:
+        return None
+    value = row["v"]
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))
+
+
 def get_stats() -> dict[str, Any]:
     queries = {
         "total": "SELECT COUNT(*) AS v FROM announcements",
