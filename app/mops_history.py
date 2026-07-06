@@ -211,40 +211,109 @@ async def sync_missing_days(
     max_days: int | None = None,
     request_delay: float = MOPS_REQUEST_DELAY,
 ) -> dict[str, Any]:
-    """從資料庫最新 report_date 的隔天起，補齊至今日。"""
+    """補齊缺口日期，並一律刷新今日／昨日（盤中可能持續有新重訊）。"""
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    dates_to_fetch: set[date] = {today, yesterday}
+
     gap = compute_gap_range()
-    if gap is None:
-        return {
-            "status": "skipped",
-            "days": 0,
-            "fetched": 0,
-            "inserted": 0,
-            "twse": {"inserted": 0},
-            "otc": {"inserted": 0},
-            "message": "資料已是最新",
-        }
-
-    date_from, date_to = gap
-    total_gap_days = (date_to - date_from).days + 1
     capped = False
-    limit = max_days if max_days is not None else (SYNC_GAP_MAX_DAYS if IS_VERCEL else None)
+    total_gap_days = 0
 
-    if limit is not None and total_gap_days > limit:
-        date_from = date_to - timedelta(days=limit - 1)
-        capped = True
+    if gap:
+        date_from, date_to = gap
+        total_gap_days = (date_to - date_from).days + 1
+        limit = max_days if max_days is not None else (SYNC_GAP_MAX_DAYS if IS_VERCEL else None)
 
-    result = await _fetch_day_range(date_from, date_to, request_delay=request_delay)
-    result["skipped"] = False
-    result["capped"] = capped
-    result["total_gap_days"] = total_gap_days
+        if limit is not None and total_gap_days > limit:
+            date_from = date_to - timedelta(days=limit - 1)
+            capped = True
+
+        current = date_from
+        while current <= date_to:
+            dates_to_fetch.add(current)
+            current += timedelta(days=1)
+
+    sorted_dates = sorted(dates_to_fetch)
+    fetched = 0
+    inserted_total = 0
+    inserted_records: list[dict[str, Any]] = []
+    errors: list[str] = []
+    pending_records: list[dict[str, Any]] = []
+
+    headers = {
+        "User-Agent": "QuantGems-Pulse/1.0",
+        "Accept": "application/json",
+    }
+
+    async with httpx.AsyncClient(
+        timeout=60.0,
+        follow_redirects=True,
+        headers=headers,
+    ) as client:
+        await _ensure_mops_session(client)
+
+        for day_index, query_day in enumerate(sorted_dates, start=1):
+            try:
+                day_records = await _fetch_day_list(client, query_day)
+                fetched += len(day_records)
+                pending_records.extend(day_records)
+
+                if len(pending_records) >= 1000:
+                    batch = insert_announcements(pending_records)
+                    inserted_total += len(batch)
+                    inserted_records.extend(batch)
+                    pending_records.clear()
+
+                logger.info(
+                    "MOPS 同步 %d/%d 天 (%s)，抓取 %d 筆",
+                    day_index,
+                    len(sorted_dates),
+                    query_day.isoformat(),
+                    len(day_records),
+                )
+            except Exception as exc:
+                logger.exception("MOPS 同步失敗：%s", query_day)
+                errors.append(f"{query_day.isoformat()}: {exc}")
+
+            if day_index < len(sorted_dates):
+                await asyncio.sleep(request_delay)
+
+    if pending_records:
+        batch = insert_announcements(pending_records)
+        inserted_total += len(batch)
+        inserted_records.extend(batch)
+
+    markets = _count_markets(inserted_records)
+    status = "error" if errors and inserted_total == 0 else ("partial" if errors else "success")
+
+    gap_days = total_gap_days
+    if inserted_total > 0:
+        message = f"更新 {len(sorted_dates)} 天，新增 {inserted_total} 筆"
+    elif gap_days == 0:
+        message = "已刷新今日資料，無新重訊"
+    else:
+        message = f"補齊 {gap_days} 天，無新重訊"
+
     if capped:
-        result["message"] = (
-            f"本次補齊 {result['days']}/{total_gap_days} 天，請再按一次同步以繼續"
-        )
-    elif not result.get("message"):
-        result["message"] = f"補齊 {result['days']} 天"
+        message += f"（尚有 {total_gap_days - gap_days} 天缺口，請再同步）"
 
-    return result
+    return {
+        "status": status,
+        "skipped": False,
+        "date_from": sorted_dates[0].isoformat(),
+        "date_to": sorted_dates[-1].isoformat(),
+        "days": len(sorted_dates),
+        "gap_days": gap_days,
+        "fetched": fetched,
+        "inserted": inserted_total,
+        "twse": {"inserted": markets["twse"]},
+        "otc": {"inserted": markets["otc"]},
+        "capped": capped,
+        "total_gap_days": total_gap_days,
+        "message": message,
+        "errors": errors,
+    }
 
 
 async def backfill_announcements(

@@ -162,7 +162,7 @@ async def sync_announcements() -> dict:
             logger.exception("通知發送失敗")
             errors.append(f"通知: {exc}")
 
-    has_data = total_fetched > 0 or gap_result.get("status") == "skipped"
+    has_data = total_fetched > 0 or gap_result.get("days", 0) > 0
     if errors and not has_data:
         log_sync(0, 0, "error", "; ".join(errors))
         return {
@@ -177,13 +177,11 @@ async def sync_announcements() -> dict:
         }
 
     status = "partial" if errors else "success"
-    gap_days = gap_result.get("days", 0)
-    if gap_days:
+    gap_days = gap_result.get("gap_days", gap_result.get("days", 0))
+    if gap_days or gap_result.get("days", 0):
         message = gap_result.get("message") or f"補齊 {gap_days} 天"
-    elif gap_result.get("status") == "skipped":
-        message = "資料已是最新"
     else:
-        message = ""
+        message = gap_result.get("message") or "同步完成"
     if errors:
         message = "; ".join(filter(None, [message, "; ".join(errors)]))
 

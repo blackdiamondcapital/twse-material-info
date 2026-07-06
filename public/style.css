@@ -325,6 +325,17 @@ body {
   box-shadow: 0 6px 20px rgba(251, 191, 36, 0.35);
 }
 
+.btn-primary.is-loading {
+  opacity: 0.75;
+  cursor: wait;
+  animation: pulse-btn 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-btn {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--text-muted);
@@ -604,6 +615,9 @@ body {
   position: fixed;
   bottom: 24px;
   right: 24px;
+  left: 24px;
+  max-width: 420px;
+  margin-left: auto;
   background: var(--bg-elevated);
   color: var(--text);
   border: 1px solid var(--border);
@@ -612,7 +626,16 @@ body {
   font-size: 0.875rem;
   z-index: 2000;
   box-shadow: var(--shadow);
-  transition: opacity 0.3s;
+  transition: opacity 0.3s, transform 0.3s;
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+}
+
+.toast.toast-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 
 .toast.hidden {

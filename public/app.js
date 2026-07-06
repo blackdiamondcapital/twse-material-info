@@ -28,10 +28,16 @@ const els = {
   statLatestDate: document.getElementById("statLatestDate"),
 };
 
+let toastTimer = null;
+
 function showToast(message, type = "info") {
+  if (toastTimer) clearTimeout(toastTimer);
   els.toast.textContent = message;
-  els.toast.className = `toast ${type}`;
-  setTimeout(() => els.toast.classList.add("hidden"), 4000);
+  els.toast.className = `toast toast-visible ${type}`;
+  toastTimer = setTimeout(() => {
+    els.toast.classList.remove("toast-visible");
+    els.toast.classList.add("hidden");
+  }, 6000);
 }
 
 function formatDate(iso) {
@@ -43,6 +49,17 @@ function formatDate(iso) {
 function formatTime(t) {
   if (!t) return "";
   return t.slice(0, 8);
+}
+
+function formatSyncTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleString("zh-TW", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function buildQuery(page) {
@@ -84,9 +101,12 @@ async function loadStats() {
     if (data.notifications?.email_enabled) parts.push("Email");
     if (data.notifications?.telegram_enabled) parts.push("Telegram");
     const cronHint = data.platform === "vercel" ? " · Vercel Cron 每小時同步" : "";
+    const syncHint = data.last_sync?.synced_at
+      ? ` · 上次同步 ${formatSyncTime(data.last_sync.synced_at)}`
+      : "";
     els.notifyStatus.textContent = parts.length
-      ? `通知已啟用：${parts.join("、")}${cronHint}`
-      : `自動同步已啟用${cronHint}`;
+      ? `通知已啟用：${parts.join("、")}${cronHint}${syncHint}`
+      : `自動同步已啟用${cronHint}${syncHint}`;
   } catch {
     showToast("無法載入統計資料", "error");
   }
@@ -226,33 +246,30 @@ function closeModal() {
 
 async function triggerSync() {
   els.syncBtn.disabled = true;
+  els.syncBtn.classList.add("is-loading");
   els.syncBtn.textContent = "同步中…";
+  els.notifyStatus.textContent = "正在同步脈動，請稍候…";
 
   try {
     const res = await fetch("/api/sync", { method: "POST" });
     const data = await res.json();
 
     if (data.status === "success" || data.status === "partial") {
-      const gap = data.gap || {};
-      let msg;
-      if (gap.days > 0) {
-        msg = `補齊 ${gap.days} 天，新增 ${gap.inserted || 0} 筆`;
-        if (gap.capped) msg += "（尚有缺口，請再同步）";
-      } else if (data.inserted > 0) {
-        msg = `脈動同步完成：上市 +${data.twse.inserted} / 上櫃 +${data.otc.inserted}`;
-      } else {
-        msg = "已是最新，無需補齊";
-      }
-      showToast(msg, data.status === "success" ? "success" : "info");
+      const msg = data.message || `新增 ${data.inserted || 0} 筆`;
+      showToast(msg, data.inserted > 0 ? "success" : "info");
+      els.notifyStatus.textContent = `同步完成：${msg}`;
       await loadStats();
       await loadAnnouncements(1);
     } else {
       showToast(`同步失敗：${data.message || "未知錯誤"}`, "error");
+      els.notifyStatus.textContent = `同步失敗：${data.message || "未知錯誤"}`;
     }
   } catch {
-    showToast("同步請求失敗", "error");
+    showToast("同步請求失敗，請稍後再試", "error");
+    els.notifyStatus.textContent = "同步請求失敗";
   } finally {
     els.syncBtn.disabled = false;
+    els.syncBtn.classList.remove("is-loading");
     els.syncBtn.textContent = "同步脈動";
   }
 }
